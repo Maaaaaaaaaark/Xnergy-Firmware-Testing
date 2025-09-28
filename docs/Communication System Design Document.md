@@ -92,3 +92,53 @@ This system implements a **lightweight time-slotted communication protocol** ove
     - Allocate 1–2 GTS slots per session.
     - Enforce slot duration ≤ 61.44ms (per GTS).
     - Reschedule missed or delayed packets.
+# 2 Pseudocode Overview
+## 2.1  Session FSM Pseudocode（session.c)
+```c
+void session_update(session, time):
+    switch(session.state):
+        case SESSION_IDLE:
+            if handshake_received:
+                session.state = SESSION_HANDSHAKE
+        case SESSION_HANDSHAKE:
+            if handshake_valid:
+                session.state = SESSION_ACTIVE
+        case SESSION_ACTIVE:
+            if timeout or error:
+                session.state = SESSION_ENDING
+        case SESSION_ENDING:
+            session_reset(session)
+```
+## 2.2 Robot charging request(robot_app.c)
+```c
+void robot_charging_request(robot_context_t *ctx) {
+    if (ctx->state != ROBOT_IDLE) return;
+
+    ctx->state = ROBOT_SCANNING;
+    int scan_result = robot_scan_stations(ctx, 500);  
+
+    if (scan_result >= 0) {
+        ctx->selected_station_id = scan_result;
+        ctx->state = ROBOT_CONNECTING;
+
+        int conn_result = robot_connect_to_station(ctx, ctx->selected_station_id);
+        if (conn_result == 0) {
+            ctx->state = ROBOT_IN_SESSION;
+            robot_maintain_session(ctx);  
+        } else {
+            ctx->state = ROBOT_ERROR;
+        }
+    } else {
+        ctx->state = ROBOT_ERROR;
+    }
+}
+```
+## 2.3 station select unique channel(station_app.c)
+```c
+void station_select_unique_channel(station_context_t *stations, uint8_t count) {
+    uint8_t preferred_channels[] = {15, 20, 25};
+    for (uint8_t i = 0; i < count; ++i) {
+        stations[i].rf_channel = preferred_channels[i % 3];
+    }
+}
+```
